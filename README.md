@@ -50,6 +50,16 @@ Start the iPhone microphone bridge:
 npm start
 ```
 
+Use built-in voice presets:
+
+```bash
+# strongest office-noise suppression, more processed voice
+npm run speech-clean
+
+# gentler processing, more natural tone
+npm run natural-voice
+```
+
 The app prints one or more iPhone URLs like:
 
 ```text
@@ -104,6 +114,10 @@ You can override these environment variables:
 | `RNNOISE_MODEL_PATH` | `models/std.rnnn` | Neural noise reduction model for FFmpeg `arnndn` |
 | `RNNOISE_MIX` | `0.85` | RNNoise strength; lower is more natural, higher removes more noise |
 | `AI_DENOISE` | `false` | Enable RNNoise neural denoising; adds latency |
+| `NOISE_REDUCTION` | `18` | Strength for `afftdn` non-AI denoiser (higher removes more noise) |
+| `NOISE_FLOOR` | `-42` | Noise floor estimate in dB for `afftdn` |
+| `GATE_THRESHOLD` | `0.025` | Silence gate threshold; higher removes room noise but can clip quiet speech |
+| `MIC_GAIN` | `0.45` | Final gain after cleanup |
 | `SPEECH_FILTER` | built in | Override the full FFmpeg speech cleanup filter |
 
 Audio-only mode:

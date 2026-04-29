@@ -7,6 +7,8 @@
   "scripts": {
     "cert": "bash scripts/gen-cert.sh",
     "start": "node server.js",
+    "speech-clean": "NOISE_REDUCTION=24 NOISE_FLOOR=-48 GATE_THRESHOLD=0.035 MIC_GAIN=0.38 node server.js",
+    "natural-voice": "NOISE_REDUCTION=12 NOISE_FLOOR=-38 GATE_THRESHOLD=0.018 MIC_GAIN=0.55 node server.js",
     "check": "node --check server.js"
   },
   "dependencies": {

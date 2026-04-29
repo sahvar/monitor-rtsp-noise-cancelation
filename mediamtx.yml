@@ -5,3 +5,7 @@ rtspTransports: [tcp]
 paths:
   iphone-mic:
     source: publisher
+    publishUser: admin
+    publishPass: "12345"
+    readUser: admin
+    readPass: "12345"

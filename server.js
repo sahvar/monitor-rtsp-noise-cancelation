@@ -11,17 +11,19 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT || 8443);
 const SAMPLE_RATE = Number(process.env.SAMPLE_RATE || 48000);
 const CHANNELS = Number(process.env.CHANNELS || 1);
-const RTSP_URL = process.env.RTSP_URL || 'rtsp://127.0.0.1:554/iphone-mic';
+const RTSP_URL = process.env.RTSP_URL || 'rtsp://admin:12345@127.0.0.1:554/iphone-mic';
 const STREAM_MODE = process.env.STREAM_MODE || 'black-video';
 const OUTPUT_AUDIO_RATE = Number(process.env.OUTPUT_AUDIO_RATE || 8000);
 const RNNOISE_MODEL_PATH = process.env.RNNOISE_MODEL_PATH || path.join(__dirname, 'models', 'std.rnnn');
 const RNNOISE_MIX = process.env.RNNOISE_MIX || '0.85';
 const AI_DENOISE = process.env.AI_DENOISE === 'true';
 const MIC_GAIN = process.env.MIC_GAIN || '0.45';
-const GATE_THRESHOLD = process.env.GATE_THRESHOLD || '0.03';
+const GATE_THRESHOLD = process.env.GATE_THRESHOLD || '0.025';
+const NOISE_REDUCTION = process.env.NOISE_REDUCTION || '18';
+const NOISE_FLOOR = process.env.NOISE_FLOOR || '-42';
 const DEFAULT_SPEECH_FILTER = AI_DENOISE
-  ? `highpass=f=120,lowpass=f=3600,arnndn=m='${RNNOISE_MODEL_PATH}':mix=${RNNOISE_MIX},compand=attacks=0.02:decays=0.25:points=-80/-80|-45/-45|-20/-12|0/-4:soft-knee=6:gain=4`
-  : 'volume=1.0';
+  ? `highpass=f=120,lowpass=f=3600,arnndn=m='${RNNOISE_MODEL_PATH}':mix=${RNNOISE_MIX},agate=threshold=0.015:ratio=1.4:attack=20:release=320,acompressor=threshold=0.08:ratio=2.0:attack=20:release=260:makeup=3:knee=3,volume=0.95,alimiter=limit=0.90`
+  : `highpass=f=140,lowpass=f=3400,afftdn=nr=${NOISE_REDUCTION}:nf=${NOISE_FLOOR}:om=o,agate=threshold=${GATE_THRESHOLD}:ratio=2.2:attack=10:release=180,compand=attacks=0.03:decays=0.22:points=-80/-80|-52/-52|-22/-14|0/-4:soft-knee=6:gain=2.5,volume=${MIC_GAIN},alimiter=limit=0.88`;
 const SPEECH_FILTER = process.env.SPEECH_FILTER || DEFAULT_SPEECH_FILTER;
 const IDLE_STREAM = process.env.IDLE_STREAM !== 'false';
 const CERT_PATH = process.env.CERT_PATH || path.join(__dirname, 'certs', 'server.crt');
@@ -212,10 +214,24 @@ function startFfmpeg(mode = 'live') {
     console.log(`${mode} ffmpeg stopped code=${code} signal=${signal}`);
     ffmpeg = null;
     ffmpegMode = null;
-    if (mode === 'live' && !activeClient && IDLE_STREAM) {
-      lastAudioPeakDb = null;
-      lastAudioRmsDb = null;
-      startFfmpeg('idle');
+    if (mode === 'live') {
+      if (activeClient) {
+        // Recover from transient RTSP/network failures while a mic client is connected.
+        setTimeout(() => {
+          if (activeClient && !ffmpeg) startFfmpeg('live');
+        }, 400);
+      } else if (IDLE_STREAM) {
+        lastAudioPeakDb = null;
+        lastAudioRmsDb = null;
+        setTimeout(() => {
+          if (!activeClient && !ffmpeg) startFfmpeg('idle');
+        }, 400);
+      }
+    } else if (mode === 'idle' && !activeClient && IDLE_STREAM) {
+      // Keep an idle carrier available for NVR/VLC probes.
+      setTimeout(() => {
+        if (!activeClient && !ffmpeg) startFfmpeg('idle');
+      }, 400);
     }
   });
 
@@ -267,12 +283,29 @@ function updateAudioLevel(buffer) {
 
 function attachWebSocket(server) {
   const wss = new WebSocketServer({ server, path: '/mic' });
+  const pingInterval = setInterval(() => {
+    for (const ws of wss.clients) {
+      if (ws.isAlive === false) {
+        ws.terminate();
+        continue;
+      }
+      ws.isAlive = false;
+      ws.ping();
+    }
+  }, 10000);
+
+  wss.on('close', () => clearInterval(pingInterval));
 
   wss.on('connection', (ws, req) => {
     if (activeClient) {
       ws.close(1013, 'Another microphone is already connected');
       return;
     }
+
+    ws.isAlive = true;
+    ws.on('pong', () => {
+      ws.isAlive = true;
+    });
 
     activeClient = ws;
     const remote = req.socket.remoteAddress;

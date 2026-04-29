@@ -3,6 +3,12 @@ services:
     image: bluenviron/mediamtx:latest
     container_name: iphone-mic-mediamtx
     restart: unless-stopped
-    network_mode: host
+    ports:
+      - "554:554"
+      - "1935:1935"
+      - "8888:8888"
+      - "8889:8889"
+      - "8189:8189/udp"
+      - "8890:8890/udp"
     volumes:
       - ./mediamtx.yml:/mediamtx.yml:ro
