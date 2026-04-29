@@ -1,0 +1,5 @@
+node_modules/
+certs/*.key
+certs/*.crt
+certs/openssl.cnf
+*.log

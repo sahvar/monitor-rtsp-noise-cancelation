@@ -1,0 +1,18 @@
+{
+  "name": "iphone-mic-rtsp",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Use an iPhone on the LAN as a microphone and publish it as an RTSP stream for an NVR.",
+  "type": "module",
+  "scripts": {
+    "cert": "bash scripts/gen-cert.sh",
+    "start": "node server.js",
+    "check": "node --check server.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

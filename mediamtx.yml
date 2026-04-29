@@ -1,0 +1,7 @@
+logLevel: info
+rtspAddress: :554
+rtspTransports: [tcp]
+
+paths:
+  iphone-mic:
+    source: publisher
