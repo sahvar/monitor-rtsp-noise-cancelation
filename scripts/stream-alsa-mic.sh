@@ -2,7 +2,7 @@
 set -euo pipefail
 
 AUDIO_DEVICE="${AUDIO_DEVICE:-plughw:0,0}"
-RTSP_URL="${RTSP_URL:-rtsp://127.0.0.1:554/iphone-mic}"
+RTSP_URL="${RTSP_URL:-rtsp://127.0.0.1:554/pc-webcam}"
 SAMPLE_RATE="${SAMPLE_RATE:-48000}"
 AUDIO_FILTER="${AUDIO_FILTER:-highpass=f=120,lowpass=f=8000,afftdn=nf=-25}"
 

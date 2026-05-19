@@ -1,9 +1,9 @@
 logLevel: info
 rtspAddress: :554
-rtspTransports: [tcp]
+rtspTransports: [udp, tcp]
 
 paths:
-  iphone-mic:
+  pc-webcam:
     source: publisher
     publishUser: admin
     publishPass: "12345"

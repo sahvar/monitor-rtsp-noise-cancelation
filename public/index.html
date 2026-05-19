@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>iPhone Mic to RTSP</title>
+    <title>PC Webcam to RTSP</title>
     <style>
       body {
         max-width: 720px;
@@ -16,20 +16,20 @@
 
       main {
         padding: 24px;
-        border-radius: 20px;
+        border-radius: 8px;
         background: #fff;
         box-shadow: 0 16px 40px rgba(20, 30, 60, 0.12);
       }
 
       button {
-        width: 100%;
+        min-height: 44px;
         margin: 8px 0;
-        padding: 16px;
+        padding: 0 16px;
         border: 0;
-        border-radius: 14px;
+        border-radius: 8px;
         color: #fff;
         background: #1363df;
-        font-size: 18px;
+        font-size: 16px;
         font-weight: 700;
       }
 
@@ -47,59 +47,70 @@
         width: 100%;
         padding: 12px;
         border: 1px solid #c7d0dd;
-        border-radius: 12px;
+        border-radius: 8px;
         background: #fff;
         color: #172033;
         font-size: 16px;
       }
 
-      #stop {
-        background: #b42318;
+      .actions {
+        display: flex;
+        gap: 10px;
+        margin: 10px 0 16px;
+      }
+
+      .actions button {
+        flex: 1;
+      }
+
+      #refresh {
+        background: #3f4b5f;
       }
 
       .status {
         margin: 16px 0;
         padding: 14px;
-        border-radius: 12px;
+        border-radius: 8px;
         background: #eef4ff;
         white-space: pre-wrap;
       }
 
-      .meter {
-        height: 14px;
-        margin: 12px 0;
-        overflow: hidden;
-        border-radius: 999px;
-        background: #e4e9f1;
-      }
-
-      #level-bar {
-        width: 0%;
-        height: 100%;
-        background: #16a34a;
-        transition: width 120ms linear;
+      .muted {
+        color: #526070;
       }
 
       code {
+        display: inline-block;
+        max-width: 100%;
         word-break: break-all;
+      }
+
+      @media (max-width: 560px) {
+        .actions {
+          display: block;
+        }
+
+        button {
+          width: 100%;
+        }
       }
     </style>
   </head>
   <body>
     <main>
-      <h1>iPhone Mic to RTSP</h1>
-      <p>Open this page on an iPhone, this PC, or any browser with a microphone.</p>
-      <label for="audio-device">Microphone</label>
-      <select id="audio-device">
-        <option value="">Default microphone</option>
-      </select>
-      <button id="start">Start Microphone Stream</button>
-      <button id="stop" disabled>Stop</button>
-      <div id="status" class="status">Idle</div>
-      <div class="meter" aria-label="Microphone level">
-        <div id="level-bar"></div>
+      <h1>PC Webcam to RTSP</h1>
+      <p class="muted">Choose which webcam connected to this PC should publish to the RTSP stream.</p>
+      <label for="video-device">Webcam</label>
+      <select id="video-device"></select>
+      <div class="actions">
+        <button id="switch-device">Use Selected Webcam</button>
+        <button id="toggle-denoise" type="button">Denoise</button>
+        <button id="refresh" type="button">Refresh</button>
       </div>
-      <p>Mic level: <code id="mic-level">no signal</code></p>
+      <div id="status" class="status">Idle</div>
+      <p>RTSP URL: <code id="rtsp-url">checking...</code></p>
+      <p>Detected webcams:</p>
+      <pre id="device-list" class="status">checking...</pre>
       <p>Server status: <code id="server-status">checking...</code></p>
     </main>
     <script src="/app.js"></script>

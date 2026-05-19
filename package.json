@@ -1,8 +1,8 @@
 {
-  "name": "iphone-mic-rtsp",
+  "name": "pc-webcam-rtsp",
   "version": "1.0.0",
   "private": true,
-  "description": "Use an iPhone on the LAN as a microphone and publish it as an RTSP stream for an NVR.",
+  "description": "Publish a directly connected PC webcam as an RTSP stream for an NVR.",
   "type": "module",
   "scripts": {
     "cert": "bash scripts/gen-cert.sh",

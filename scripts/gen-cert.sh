@@ -26,7 +26,7 @@ x509_extensions = v3_req
 prompt = no
 
 [req_distinguished_name]
-CN = iphone-mic-rtsp.local
+CN = pc-webcam-rtsp.local
 
 [v3_req]
 basicConstraints = CA:FALSE
@@ -49,4 +49,4 @@ echo "Created:"
 echo "  $CERT_FILE"
 echo "  $KEY_FILE"
 echo
-echo "Open the HTTPS page from the iPhone and accept the certificate warning."
+echo "Open the HTTPS fallback microphone page and accept the certificate warning."

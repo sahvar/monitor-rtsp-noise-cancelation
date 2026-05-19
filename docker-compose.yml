@@ -1,7 +1,7 @@
 services:
   mediamtx:
     image: bluenviron/mediamtx:latest
-    container_name: iphone-mic-mediamtx
+    container_name: webcam-mediamtx
     restart: unless-stopped
     ports:
       - "554:554"
