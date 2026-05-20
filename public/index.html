@@ -67,6 +67,14 @@
         background: #3f4b5f;
       }
 
+      #stop-recording {
+        background: #b42318;
+      }
+
+      #run-dasheng {
+        background: #0f766e;
+      }
+
       .status {
         margin: 16px 0;
         padding: 14px;
@@ -83,6 +91,22 @@
         display: inline-block;
         max-width: 100%;
         word-break: break-all;
+      }
+
+      audio {
+        width: 100%;
+      }
+
+      .inline-field {
+        display: grid;
+        grid-template-columns: 160px 1fr;
+        gap: 12px;
+        align-items: center;
+        margin: 10px 0;
+      }
+
+      .inline-field label {
+        margin: 0;
       }
 
       @media (max-width: 560px) {
@@ -108,6 +132,28 @@
         <button id="refresh" type="button">Refresh</button>
       </div>
       <div id="status" class="status">Idle</div>
+      <section>
+        <h2>Dasheng Test</h2>
+        <p class="muted">Record a sample, play it, run Dasheng, then compare the denoised output.</p>
+        <div class="inline-field">
+          <label for="dasheng-profile">Dasheng mode</label>
+          <select id="dasheng-profile">
+            <option value="clear" selected>Clear speech</option>
+            <option value="balanced">Balanced</option>
+            <option value="strong">Strong denoise</option>
+          </select>
+        </div>
+        <div class="actions">
+          <button id="start-recording" type="button">Start Recording</button>
+          <button id="stop-recording" type="button" disabled>Stop Recording</button>
+          <button id="run-dasheng" type="button" disabled>Run Dasheng</button>
+        </div>
+        <p>Original recording:</p>
+        <audio id="noisy-player" controls></audio>
+        <p>Dasheng denoised:</p>
+        <audio id="dasheng-player" controls></audio>
+        <div id="recording-status" class="status">No recording yet.</div>
+      </section>
       <p>RTSP URL: <code id="rtsp-url">checking...</code></p>
       <p>Detected webcams:</p>
       <pre id="device-list" class="status">checking...</pre>

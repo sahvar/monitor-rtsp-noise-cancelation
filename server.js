@@ -13,8 +13,8 @@ const PORT = Number(process.env.PORT || 8443);
 const SAMPLE_RATE = Number(process.env.SAMPLE_RATE || 48000);
 const CHANNELS = Number(process.env.CHANNELS || 1);
 const STREAM_SOURCE = process.env.STREAM_SOURCE || 'pc-webcam';
-const RTSP_URL = process.env.RTSP_URL || 'rtsp://127.0.0.1:554/pc-webcam';
-const RTSP_TRANSPORT = process.env.RTSP_TRANSPORT || 'udp';
+const RTSP_URL = process.env.RTSP_URL || 'rtsp://admin:12345@127.0.0.1:554/pc-webcam';
+const RTSP_TRANSPORT = process.env.RTSP_TRANSPORT || 'tcp';
 const STREAM_MODE = process.env.STREAM_MODE || 'black-video';
 const DEFAULT_VIDEO_DEVICE = process.env.VIDEO_DEVICE || '/dev/video0';
 const VIDEO_SIZE = process.env.VIDEO_SIZE || '640x480';
@@ -48,6 +48,9 @@ const IDLE_STREAM = process.env.IDLE_STREAM !== 'false';
 const CERT_PATH = process.env.CERT_PATH || path.join(__dirname, 'certs', 'server.crt');
 const KEY_PATH = process.env.KEY_PATH || path.join(__dirname, 'certs', 'server.key');
 const STATUS_PROTOCOL = STREAM_SOURCE === 'browser-mic' ? 'https' : 'http';
+const RECORDINGS_DIR = process.env.RECORDINGS_DIR || path.join(__dirname, 'recordings');
+const DASHENG_MODEL_DIR = process.env.DASHENG_MODEL_DIR || path.join(__dirname, 'dasheng-denoiser');
+const RECORDING_READY_DELAY_MS = 1000;
 
 let ffmpeg = null;
 let ffmpegMode = null;
@@ -58,6 +61,11 @@ let lastAudioPeakDb = null;
 let lastAudioRmsDb = null;
 let currentVideoDevice = DEFAULT_VIDEO_DEVICE;
 let aiDenoiseEnabled = AI_DENOISE;
+let recording = null;
+let lastRecordingPath = null;
+let dasheng = null;
+let lastDashengPath = null;
+let lastDashengError = null;
 
 function getLanAddresses() {
   const interfaces = os.networkInterfaces();
@@ -85,6 +93,62 @@ function contentTypeFor(filePath) {
 function sendJson(res, statusCode, payload) {
   res.writeHead(statusCode, { 'content-type': 'application/json; charset=utf-8' });
   res.end(JSON.stringify(payload));
+}
+
+function publicRecordingUrl(filePath) {
+  if (!filePath) return null;
+  return `/recordings/${encodeURIComponent(path.basename(filePath))}`;
+}
+
+function safeRecordingPath(fileName) {
+  const basename = path.basename(fileName);
+  const filePath = path.join(RECORDINGS_DIR, basename);
+  if (!filePath.startsWith(RECORDINGS_DIR)) {
+    return null;
+  }
+  return filePath;
+}
+
+function newestRecordingFile({ suffix, excludeSuffix = null }) {
+  if (!fs.existsSync(RECORDINGS_DIR)) return null;
+
+  const files = fs.readdirSync(RECORDINGS_DIR)
+    .filter((fileName) => fileName.endsWith(suffix))
+    .filter((fileName) => !excludeSuffix || !fileName.endsWith(excludeSuffix))
+    .map((fileName) => {
+      const filePath = path.join(RECORDINGS_DIR, fileName);
+      return {
+        filePath,
+        mtimeMs: fs.statSync(filePath).mtimeMs
+      };
+    })
+    .sort((a, b) => b.mtimeMs - a.mtimeMs);
+
+  return files[0]?.filePath || null;
+}
+
+function isRecordingFileReady(filePath) {
+  if (!filePath || !fs.existsSync(filePath)) return false;
+  const stats = fs.statSync(filePath);
+  return stats.size > 44 && Date.now() - stats.mtimeMs >= RECORDING_READY_DELAY_MS;
+}
+
+function recordingStatus() {
+  const noisyPath = lastRecordingPath || newestRecordingFile({ suffix: '.wav', excludeSuffix: '-dasheng.wav' });
+  const matchingDashengPath = noisyPath ? noisyPath.replace(/\.wav$/i, '-dasheng.wav') : null;
+  const dashengPath = lastDashengPath || (matchingDashengPath && fs.existsSync(matchingDashengPath) ? matchingDashengPath : null);
+  const noisyReady = noisyPath && !recording && isRecordingFileReady(noisyPath);
+  const dashengReady = dashengPath && !dasheng && isRecordingFileReady(dashengPath);
+
+  return {
+    recording: Boolean(recording),
+    dashengRunning: Boolean(dasheng),
+    noisyUrl: noisyReady ? publicRecordingUrl(noisyPath) : null,
+    dashengUrl: dashengReady ? publicRecordingUrl(dashengPath) : null,
+    noisyFile: noisyReady ? path.basename(noisyPath) : null,
+    dashengFile: dashengReady ? path.basename(dashengPath) : null,
+    dashengError: lastDashengError
+  };
 }
 
 function listVideoDevices() {
@@ -185,6 +249,47 @@ function serveStatic(req, res) {
       audioPeakDb: lastAudioPeakDb,
       audioRmsDb: lastAudioRmsDb
     });
+    return;
+  }
+
+  if (requestedPath === '/recording/status') {
+    sendJson(res, 200, recordingStatus());
+    return;
+  }
+
+  if (requestedPath === '/recording/start' && req.method === 'POST') {
+    const result = startRecording();
+    sendJson(res, result.ok ? 200 : 409, result);
+    return;
+  }
+
+  if (requestedPath === '/recording/stop' && req.method === 'POST') {
+    const result = stopRecording();
+    sendJson(res, result.ok ? 200 : 409, result);
+    return;
+  }
+
+  if (requestedPath === '/dasheng/run' && req.method === 'POST') {
+    const profile = new URL(req.url, `${STATUS_PROTOCOL}://${req.headers.host}`).searchParams.get('profile');
+    const result = startDasheng(profile);
+    sendJson(res, result.ok ? 200 : 409, result);
+    return;
+  }
+
+  if (requestedPath.startsWith('/recordings/')) {
+    const filePath = safeRecordingPath(decodeURIComponent(requestedPath.slice('/recordings/'.length)));
+
+    if (!filePath || !fs.existsSync(filePath)) {
+      res.writeHead(404);
+      res.end('Not found');
+      return;
+    }
+
+    res.writeHead(200, {
+      'content-type': 'audio/wav',
+      'cache-control': 'no-store'
+    });
+    fs.createReadStream(filePath).pipe(res);
     return;
   }
 
@@ -527,6 +632,102 @@ function stopFfmpeg() {
     lastAudioPeakDb = null;
     lastAudioRmsDb = null;
   }
+}
+
+function startRecording() {
+  if (recording) {
+    return { ok: false, error: 'Recording is already running.', ...recordingStatus() };
+  }
+
+  fs.mkdirSync(RECORDINGS_DIR, { recursive: true });
+  stopFfmpeg();
+
+  const fileName = `noisy-${new Date().toISOString().replace(/[:.]/g, '-')}.wav`;
+  const filePath = path.join(RECORDINGS_DIR, fileName);
+  lastRecordingPath = filePath;
+  lastDashengPath = null;
+  lastDashengError = null;
+
+  recording = spawn('ffmpeg', [
+    '-hide_banner',
+    '-loglevel', 'warning',
+    '-f', 'alsa',
+    '-ac', '1',
+    '-ar', String(SAMPLE_RATE),
+    '-i', AUDIO_DEVICE,
+    '-ac', '1',
+    '-ar', '16000',
+    '-c:a', 'pcm_s16le',
+    '-y',
+    filePath
+  ], { stdio: ['pipe', 'inherit', 'inherit'] });
+
+  recording.on('exit', (code, signal) => {
+    console.log(`Recording stopped code=${code} signal=${signal}`);
+    recording = null;
+    if (STREAM_SOURCE === 'pc-webcam' && !ffmpeg) {
+      setTimeout(() => startFfmpeg('pc-webcam'), 300);
+    }
+  });
+
+  return { ok: true, ...recordingStatus() };
+}
+
+function stopRecording() {
+  if (!recording) {
+    return { ok: false, error: 'Recording is not running.', ...recordingStatus() };
+  }
+
+  recording.stdin?.write('q');
+  setTimeout(() => {
+    if (recording) recording.kill('SIGTERM');
+  }, 1500);
+
+  return { ok: true, ...recordingStatus() };
+}
+
+function startDasheng(profile = 'clear') {
+  if (dasheng) {
+    return { ok: false, error: 'Dasheng is already running.', ...recordingStatus() };
+  }
+  const inputPath = lastRecordingPath || newestRecordingFile({ suffix: '.wav', excludeSuffix: '-dasheng.wav' });
+
+  if (!inputPath || !isRecordingFileReady(inputPath)) {
+    return { ok: false, error: 'Record a noisy sample first.', ...recordingStatus() };
+  }
+  if (!fs.existsSync(DASHENG_MODEL_DIR)) {
+    return { ok: false, error: `Dasheng model directory is missing: ${DASHENG_MODEL_DIR}`, ...recordingStatus() };
+  }
+
+  const dashengProfile = ['clear', 'balanced', 'strong'].includes(profile) ? profile : 'clear';
+  lastDashengError = null;
+  lastRecordingPath = inputPath;
+  lastDashengPath = inputPath.replace(/\.wav$/i, '-dasheng.wav');
+
+  dasheng = spawn('python3', [
+    path.join(__dirname, 'scripts', 'dasheng_denoise.py'),
+    inputPath,
+    '-o', lastDashengPath,
+    '--model-dir', DASHENG_MODEL_DIR,
+    '--profile', dashengProfile
+  ], { stdio: ['ignore', 'inherit', 'pipe'] });
+
+  let stderr = '';
+  dasheng.stderr.on('data', (chunk) => {
+    stderr += chunk.toString();
+    process.stderr.write(chunk);
+  });
+
+  dasheng.on('exit', (code, signal) => {
+    console.log(`Dasheng stopped code=${code} signal=${signal}`);
+    if (code !== 0) {
+      lastDashengError = stderr.trim() || `Dasheng exited with code ${code}`;
+      lastDashengPath = null;
+    }
+    dasheng = null;
+  });
+
+  return { ok: true, ...recordingStatus() };
 }
 
 function dbFromLinear(value) {

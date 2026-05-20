@@ -111,7 +111,7 @@ You can override these environment variables:
 | `RTSP_URL` | `rtsp://127.0.0.1:554/pc-webcam` | RTSP publish URL used by `ffmpeg` |
 | `VIDEO_DEVICE` | `/dev/video0` | Linux video device for the connected webcam |
 | `VIDEO_SIZE` | `640x480` | Capture resolution |
-| `RTSP_TRANSPORT` | `udp` | RTSP publishing transport; `udp` is lowest latency, `tcp` is more firewall-friendly |
+| `RTSP_TRANSPORT` | `tcp` | RTSP publishing transport; `tcp` is most reliable through Docker, `udp` can be lower latency on a clean local network |
 | `VIDEO_FRAMERATE` | `30` | Capture frame rate |
 | `VIDEO_FORMAT` | empty | Optional v4l2 input format, such as `mjpeg` |
 | `AUDIO_SOURCE` | `alsa` | Use `alsa` to capture a chosen ALSA audio device, or `silent` for no microphone audio |
@@ -123,6 +123,27 @@ You can override these environment variables:
 | `AUDIO_BITRATE` | `96k` | AAC bitrate |
 
 AI denoise can also be toggled live from the status page without restarting the RTSP stream.
+
+## Dasheng Offline Test
+
+Clone the Dasheng model once:
+
+```bash
+git clone https://huggingface.co/mispeech/dasheng-denoiser
+```
+
+Then open the status page and use the **Dasheng Test** buttons:
+
+1. **Start Recording** records a noisy sample from the FaceCam microphone.
+2. **Stop Recording** saves the original WAV and restarts the RTSP stream.
+3. Choose a Dasheng mode:
+   - **Clear speech** keeps more original voice detail and is best when words sound chopped.
+   - **Balanced** removes more noise while still preserving speech.
+   - **Strong denoise** is quietest, but can make speech less natural.
+4. **Run Dasheng** creates a denoised WAV from that recording.
+5. Use the two audio players to compare the original and Dasheng output.
+
+Recordings are saved under `recordings/` and are ignored by Git.
 
 Use a different webcam:
 

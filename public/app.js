@@ -6,6 +6,13 @@ const statusBox = document.querySelector('#status');
 const serverStatus = document.querySelector('#server-status');
 const rtspUrl = document.querySelector('#rtsp-url');
 const deviceList = document.querySelector('#device-list');
+const startRecordingButton = document.querySelector('#start-recording');
+const stopRecordingButton = document.querySelector('#stop-recording');
+const runDashengButton = document.querySelector('#run-dasheng');
+const dashengProfile = document.querySelector('#dasheng-profile');
+const noisyPlayer = document.querySelector('#noisy-player');
+const dashengPlayer = document.querySelector('#dasheng-player');
+const recordingStatus = document.querySelector('#recording-status');
 let aiDenoiseEnabled = false;
 
 function setStatus(message) {
@@ -80,10 +87,53 @@ async function refreshServerStatus() {
   }
 }
 
+function withCacheBust(url) {
+  if (!url) return '';
+  return `${url}${url.includes('?') ? '&' : '?'}t=${Date.now()}`;
+}
+
+async function refreshRecordingStatus() {
+  try {
+    const response = await fetch('/recording/status', { cache: 'no-store' });
+    const status = await response.json();
+
+    startRecordingButton.disabled = status.recording || status.dashengRunning;
+    stopRecordingButton.disabled = !status.recording;
+    runDashengButton.disabled = status.recording || status.dashengRunning || !status.noisyUrl;
+
+    if (status.noisyUrl && noisyPlayer.dataset.url !== status.noisyUrl) {
+      noisyPlayer.src = withCacheBust(status.noisyUrl);
+      noisyPlayer.dataset.url = status.noisyUrl;
+    } else if (!status.noisyUrl) {
+      noisyPlayer.removeAttribute('src');
+      noisyPlayer.dataset.url = '';
+    }
+
+    if (status.dashengUrl && dashengPlayer.dataset.url !== status.dashengUrl) {
+      dashengPlayer.src = withCacheBust(status.dashengUrl);
+      dashengPlayer.dataset.url = status.dashengUrl;
+    } else if (!status.dashengUrl) {
+      dashengPlayer.removeAttribute('src');
+      dashengPlayer.dataset.url = '';
+    }
+
+    recordingStatus.textContent = [
+      `recording: ${status.recording ? 'yes' : 'no'}`,
+      `dasheng: ${status.dashengRunning ? 'running' : 'idle'}`,
+      `original: ${status.noisyUrl || 'none'}`,
+      `denoised: ${status.dashengUrl || 'none'}`,
+      status.dashengError ? `error: ${status.dashengError}` : ''
+    ].filter(Boolean).join('\n');
+  } catch {
+    recordingStatus.textContent = 'Recording controls offline.';
+  }
+}
+
 async function refreshAll() {
   try {
     await loadDevices();
     await refreshServerStatus();
+    await refreshRecordingStatus();
     setStatus('Ready');
   } catch (error) {
     setStatus(error.message);
@@ -148,9 +198,55 @@ async function toggleDenoise() {
   }
 }
 
+async function postRecordingAction(url, workingMessage) {
+  setStatus(workingMessage);
+  const response = await fetch(url, { method: 'POST' });
+  const result = await response.json();
+
+  if (!response.ok || !result.ok) {
+    throw new Error(result.error || 'Action failed.');
+  }
+
+  await refreshRecordingStatus();
+  await refreshServerStatus();
+}
+
+async function startRecording() {
+  try {
+    await postRecordingAction('/recording/start', 'Recording noisy sample...');
+    setStatus('Recording. Speak now, then press Stop Recording.');
+  } catch (error) {
+    setStatus(error.message);
+  }
+}
+
+async function stopRecording() {
+  try {
+    await postRecordingAction('/recording/stop', 'Stopping recording...');
+    setStatus('Recording saved. You can play it or run Dasheng.');
+    setTimeout(refreshRecordingStatus, 1200);
+  } catch (error) {
+    setStatus(error.message);
+  }
+}
+
+async function runDasheng() {
+  try {
+    const profile = encodeURIComponent(dashengProfile.value || 'clear');
+    await postRecordingAction(`/dasheng/run?profile=${profile}`, 'Running Dasheng denoiser...');
+    setStatus('Dasheng is running. This may take a bit.');
+  } catch (error) {
+    setStatus(error.message);
+  }
+}
+
 switchButton.addEventListener('click', switchDevice);
 denoiseButton.addEventListener('click', toggleDenoise);
 refreshButton.addEventListener('click', refreshAll);
+startRecordingButton.addEventListener('click', startRecording);
+stopRecordingButton.addEventListener('click', stopRecording);
+runDashengButton.addEventListener('click', runDasheng);
 
 setInterval(refreshServerStatus, 2000);
+setInterval(refreshRecordingStatus, 2000);
 refreshAll();
